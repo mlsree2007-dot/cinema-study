@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinema Study | Ultimate Edition</title>
+    <style>
+        :root { --red: #e50914; --gold: #ffcc00; --dark: #0a0a0a; }
+        body { margin: 0; background: var(--dark); color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; min-height: 100vh; padding: 20px; }
+        .app-container { width: 100%; max-width: 500px; text-align: center; }
+        
+        h1 { color: var(--red); letter-spacing: 3px; margin-bottom: 10px; text-transform: uppercase; }
+        .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 20px; }
+        
+        /* New Instructions Styling */
+        .instructions-card { background: rgba(229, 9, 20, 0.05); border: 1px dashed var(--red); padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: left; font-size: 0.85rem; line-height: 1.5; }
+        .instructions-card b { color: var(--red); }
+        .step-num { display: inline-block; background: var(--red); color: white; width: 18px; height: 18px; text-align: center; border-radius: 50%; font-size: 0.7rem; margin-right: 5px; font-weight: bold; }
+
+        .card { background: #1a1a1a; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #333; text-align: left; }
+        h3 { margin-top: 0; color: #888; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 15px; }
+
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #444; background: #000; color: white; box-sizing: border-box; font-size: 1rem; }
+        
+        .or-divider { text-align: center; color: #444; font-size: 0.7rem; font-weight: bold; margin: 10px 0; }
+
+        button.start-btn { width: 100%; padding: 18px; background: var(--red); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1.2rem; margin-top: 10px; box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3); }
+        
+        /* Theater UI */
+        #theater-mode { display: none; }
+        .timer { font-size: 6rem; font-weight: 800; margin: 20px 0; font-variant-numeric: tabular-nums; }
+        .now-playing { color: #888; letter-spacing: 2px; margin: 0; }
+        .current-task { color: var(--gold); font-size: 1.5rem; margin: 10px 0 30px 0; font-style: italic; }
+        
+        /* Overlay */
+        #intermission { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.98); z-index: 100; flex-direction: column; align-items: center; justify-content: center; }
+        
+        /* History */
+        .log-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #222; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div id="setup-mode">
+        <h1>CINEMA STUDY</h1>
+        <p class="subtitle">Assign a task to a movie duration.</p>
+
+        <div class="instructions-card">
+            <h4 style="margin-top:0; color:var(--red); text-transform:uppercase;">🎥 Admission Rules:</h4>
+            <div><span class="step-num">1</span><b>Pick a Movie:</b> Select a title or enter a custom duration in minutes.</div>
+            <div><span class="step-num">2</span><b>Assign Task:</b> Type what you will study (e.g., Matrix Calculus).</div>
+            <div><span class="step-num">3</span><b>No Pausing:</b> Once the show starts, the clock <b>cannot</b> be stopped.</div>
+            <div><span class="step-num">4</span><b>Intermission:</b> A 20-minute mandatory break occurs at the 50% mark.</div>
+        </div>
+
+        <div class="card">
+            <h3>Step 1: Choose or Add Movie</h3>
+            <select id="movieSelect" onchange="clearManual()">
+                <option value="" disabled selected>Select an Indian Movie...</option>
+                <option value="164">Leo (164 mins)</option>
+                <option value="175">Vikram (175 mins)</option>
+                <option value="187">RRR (187 mins)</option>
+                <option value="168">Jailer (168 mins)</option>
+                <option value="147">Maanadu (147 mins)</option>
+            </select>
+
+            <div class="or-divider">— OR ADD CUSTOM —</div>
+
+            <input type="text" id="manualMovieName" placeholder="Enter Movie Name" oninput="clearDropdown()">
+            <input type="number" id="manualDuration" placeholder="Duration in Minutes" oninput="clearDropdown()">
+        </div>
+
+        <div class="card">
+            <h3>Step 2: What are you studying?</h3>
+            <input type="text" id="studyTask" placeholder="e.g., Mechanical Vibration Problems">
+        </div>
+
+        <button class="start-btn" onclick="validateAndStart()">START SESSION</button>
+
+        <div class="card" style="margin-top: 30px;">
+            <h3>Session History</h3>
+            <div id="history-log"></div>
+        </div>
+    </div>
+
+    <div id="theater-mode">
+        <p class="now-playing" id="activeMovieName"></p>
+        <div class="timer" id="mainClock">00:00:00</div>
+        <div class="current-task" id="activeTaskName"></div>
+        <button onclick="location.reload()" style="background:none; border:1px solid #444; color:#444; padding:8px 20px; cursor:pointer; border-radius:4px;">EXIT THEATER</button>
+    </div>
+
+    <div id="intermission">
+        <h1 style="color: var(--gold); font-size: 3rem;">INTERMISSION</h1>
+        <div class="timer" id="breakClock" style="color: var(--gold);">20:00</div>
+        <p>Take a 20-minute break. Don't look at your task!</p>
+    </div>
+</div>
+
+<script>
+    let timer, timeLeft, finalMovieName, selectedTask;
+
+    function clearManual() {
+        document.getElementById('manualMovieName').value = "";
+        document.getElementById('manualDuration').value = "";
+    }
+    function clearDropdown() {
+        document.getElementById('movieSelect').selectedIndex = 0;
+    }
+
+    function validateAndStart() {
+        const dropdown = document.getElementById('movieSelect');
+        const manualName = document.getElementById('manualMovieName').value;
+        const manualMins = document.getElementById('manualDuration').value;
+        selectedTask = document.getElementById('studyTask').value;
+
+        let duration = 0;
+
+        if (manualName && manualMins) {
+            finalMovieName = manualName;
+            duration = parseInt(manualMins);
+        } else if (dropdown.value) {
+            finalMovieName = dropdown.options[dropdown.selectedIndex].text.split(' (')[0];
+            duration = parseInt(dropdown.value);
+        }
+
+        if (!duration || !selectedTask) {
+            alert("Please provide a movie and a study task!");
+            return;
+        }
+
+        startSession(duration);
+    }
+
+    function startSession(mins) {
+        timeLeft = mins * 60;
+        const halfTime = Math.floor(timeLeft / 2);
+
+        document.getElementById('setup-mode').style.display = 'none';
+        document.getElementById('theater-mode').style.display = 'block';
+        document.getElementById('activeMovieName').innerText = `NOW PLAYING: ${finalMovieName.toUpperCase()}`;
+        document.getElementById('activeTaskName').innerText = `TASK: ${selectedTask}`;
+
+        timer = setInterval(() => {
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                saveToLog(finalMovieName, selectedTask);
+                alert("BLOCKBUSTER! Task complete.");
+                location.reload();
+            } else if (timeLeft === halfTime) {
+                runIntermission();
+            } else {
+                timeLeft--;
+                formatTime('mainClock', timeLeft);
+            }
+        }, 1000);
+    }
+
+    function runIntermission() {
+        document.getElementById('intermission').style.display = 'flex';
+        let breakSec = 20 * 60;
+        const bTimer = setInterval(() => {
+            breakSec--;
+            formatTime('breakClock', breakSec);
+            if (breakSec <= 0) {
+                clearInterval(bTimer);
+                document.getElementById('intermission').style.display = 'none';
+            }
+        }, 1000);
+    }
+
+    function formatTime(id, sec) {
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        document.getElementById(id).innerText = 
+            `${h > 0 ? h.toString().padStart(2,'0')+':' : ''}${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+    }
+
+    function saveToLog(movie, task) {
+        let logs = JSON.parse(localStorage.getItem('cinemaTaskLogs')) || [];
+        logs.unshift({ movie, task, date: new Date().toLocaleDateString() });
+        localStorage.setItem('cinemaTaskLogs', JSON.stringify(logs.slice(0, 10)));
+    }
+
+    function displayLogs() {
+        const div = document.getElementById('history-log');
+        const logs = JSON.parse(localStorage.getItem('cinemaTaskLogs')) || [];
+        div.innerHTML = logs.map(l => `
+            <div class="log-row">
+                <div style="font-size:0.85rem"><b>${l.task}</b><br><span style="color:#666">${l.movie}</span></div>
+                <div style="color:var(--gold); font-size:0.8rem">${l.date}</div>
+            </div>
+        `).join('') || "No tasks completed yet.";
+    }
+
+    window.onload = displayLogs;
+</script>
+
+</body>
+</html>
